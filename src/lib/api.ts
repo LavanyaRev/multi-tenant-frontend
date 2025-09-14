@@ -1,90 +1,94 @@
+// lib/api.ts
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://multi-tenant-backend-5w1o.vercel.app';
 
-export async function login(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+// -------------------- TYPES --------------------
+export interface AuthResponse {
+  token: string;
+  user: { id: string; email: string };
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: Record<string, unknown>; // Tiptap JSON
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Tenant {
+  slug: string;
+  plan: string;
+  upgraded_at?: string;
+}
+
+// -------------------- HELPER --------------------
+async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${url}`, options);
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    throw new Error(error.error || `Login failed (${res.status})`);
+    throw new Error(error.error || `Request failed (${res.status})`);
   }
 
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
-export async function signup(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/api/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+// -------------------- AUTH --------------------
+export function login(email: string, password: string): Promise<AuthResponse> {
+  return apiFetch<AuthResponse>('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.error || `Signup failed (${res.status})`);
-  }
-
-  return res.json();
 }
 
-export async function fetchNotes(token: string) {
-  const res = await fetch(`${API_BASE}/api/notes`, {
+export function signup(email: string, password: string): Promise<AuthResponse> {
+  return apiFetch<AuthResponse>('/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+// -------------------- NOTES --------------------
+export function fetchNotes(token: string): Promise<Note[]> {
+  return apiFetch<Note[]>('/api/notes', {
     headers: { Authorization: `Bearer ${token}` },
   });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.error || `Failed to fetch notes (${res.status})`);
-  }
-
-  return res.json();
 }
 
-export async function createNote(token: string, title = "New Note") {
-  const res = await fetch(`${API_BASE}/api/notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ title, content: "" }),
+export function createNote(token: string, title = 'New Note'): Promise<Note> {
+  return apiFetch<Note>('/api/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ title, content: { type: 'doc', content: [] } }),
   });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.error || `Failed to create note (${res.status})`);
-  }
-
-  return res.json();
 }
 
-export async function updateNote(token: string, id: string, title: string, content: string) {
-  const res = await fetch(`${API_BASE}/api/notes/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+export function updateNote(
+  token: string,
+  id: string,
+  title: string,
+  content: Record<string, unknown>
+): Promise<Note> {
+  return apiFetch<Note>(`/api/notes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ title, content }),
   });
-
-  if (!res.ok) throw new Error("Failed to update note");
-  return res.json();
 }
 
-export async function deleteNote(token: string, id: string) {
-  const res = await fetch(`${API_BASE}/api/notes/${id}`, {
-    method: "DELETE",
+export function deleteNote(token: string, id: string): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/notes/${id}`, {
+    method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
-
-  if (!res.ok) throw new Error("Failed to delete note");
-  return res.json();
 }
 
-export async function upgradeTenant(token: string, slug: string) {
-  const res = await fetch(`${API_BASE}/api/tenants/${slug}/upgrade`, {
-    method: "POST",
+// -------------------- TENANTS --------------------
+export function upgradeTenant(token: string, slug: string): Promise<Tenant> {
+  return apiFetch<Tenant>(`/api/tenants/${slug}/upgrade`, {
+    method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
-
-  if (!res.ok) throw new Error("Failed to upgrade tenant");
-  return res.json();
 }

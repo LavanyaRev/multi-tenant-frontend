@@ -1,60 +1,56 @@
 'use client';
-import { useState, useEffect, useContext } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { AuthContext } from '../../../context/AuthContext';
-import NoteEditor from '../../../components/NoteEditor';
-import { fetchNotes, updateNote, deleteNote } from '../../../lib/api';
+
+import { useParams } from 'next/navigation';
+import { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '@/context/AuthContext';
+import { fetchNotes, updateNote, Note } from '@/lib/api';
+import NoteEditor from '@/components/NoteEditor';
 
 export default function NotePage() {
-  const router = useRouter();
-  const params = useParams();
+  const { id } = useParams();
+  const noteId = Array.isArray(id) ? id[0] : id; // normalize to string
   const { token } = useContext(AuthContext);
 
-  const [note, setNote] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [note, setNote] = useState<Note | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!token) return router.push('/login');
-    fetchNotes(token).then((data) => {
-      const currentNote = data.find((n: any) => n.id === params.id);
-      if (!currentNote) return router.push('/dashboard');
-      setNote(currentNote);
-      setLoading(false);
-    });
-  }, [token, params.id, router]);
+    if (token && noteId) loadNote();
+  }, [token, noteId]);
 
-  const handleUpdate = (content: string) => {
-    if (!note) return;
-    setNote({ ...note, content });
-    updateNote(token!, note.id, note.title, content);
+  const loadNote = async () => {
+    if (!token || !noteId) return;
+    try {
+      const notes = await fetchNotes(token);
+      const currentNote = notes.find((n) => n.id === noteId);
+      if (currentNote) setNote(currentNote);
+    } catch (err) {
+      console.error('Failed to load note', err);
+    }
   };
 
-  const handleDelete = async () => {
-    if (!note) return;
-    await deleteNote(token!, note.id);
-    router.push('/dashboard');
+  const handleUpdate = async (content: Record<string, unknown>) => {
+    if (!token || !noteId || !note) return;
+    setSaving(true);
+    try {
+      const updatedNote = await updateNote(token, noteId, note.title, content);
+      setNote(updatedNote);
+    } catch (err) {
+      console.error('Failed to save note', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loading) return <p>Loading...</p>;
-  if (!note) return <p>Note not found</p>;
+  if (!note) return <p className="p-6">Loading...</p>;
 
   return (
-    <div className="flex p-6">
-      <div className="flex-1">
-        <input
-          className="text-2xl font-bold mb-4 w-full"
-          value={note.title}
-          onChange={(e) => setNote({ ...note, title: e.target.value })}
-          onBlur={() => updateNote(token!, note.id, note.title, note.content)}
-        />
-        <NoteEditor content={note.content} onUpdate={handleUpdate} />
-      </div>
-      <button
-        onClick={handleDelete}
-        className="ml-4 p-2 bg-red-500 text-white rounded hover:bg-red-600"
-      >
-        Delete Note
-      </button>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">{note.title}</h1>
+      <NoteEditor content={note.content} onUpdate={handleUpdate} />
+      <p className="text-sm text-gray-500 mt-2">
+        {saving ? 'Saving...' : 'All changes saved'}
+      </p>
     </div>
   );
 }
